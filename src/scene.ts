@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { BLOCKS, hash, World, type Cell } from "./world.ts";
+import { ForestCharacter } from "./character.ts";
 
 const faces = [
   {
@@ -90,6 +91,12 @@ export class GameScene {
   camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.05, 300);
   terrain = new THREE.Group();
   clouds = new THREE.Group();
+  character = new ForestCharacter();
+  forestDetails = new THREE.Group();
+  private detailCube = new THREE.BoxGeometry(1, 1, 1);
+  private detailMaterials = ["#6f9346", "#eae9cc", "#ffc25c", "#c3704f"].map(
+    (color) => new THREE.MeshLambertMaterial({ color }),
+  );
   materials = BLOCKS.map(
     (b) =>
       new THREE.MeshLambertMaterial({ map: texture(b.id), vertexColors: true }),
@@ -134,7 +141,13 @@ export class GameScene {
     this.sun.shadow.normalBias = 0.045;
     this.sun.shadow.bias = -0.0001;
     this.scene.add(this.sun);
-    this.scene.add(this.terrain, this.outline, this.clouds);
+    this.scene.add(
+      this.terrain,
+      this.outline,
+      this.clouds,
+      this.character.root,
+      this.forestDetails,
+    );
     this.outline.visible = false;
     this.water = new THREE.Mesh(
       new THREE.PlaneGeometry(600, 600),
@@ -222,6 +235,66 @@ export class GameScene {
       const mesh = new THREE.Mesh(geometry, this.materials[i]);
       mesh.castShadow = mesh.receiveShadow = true;
       this.terrain.add(mesh);
+    });
+    this.rebuildForest(world);
+  }
+  private rebuildForest(world: World) {
+    for (const child of [
+      ...this.forestDetails.children,
+    ] as THREE.InstancedMesh[]) {
+      child.dispose();
+      this.forestDetails.remove(child);
+    }
+    const batches = this.detailMaterials.map(() => [] as THREE.Matrix4[]);
+    const add = (
+      material: number,
+      x: number,
+      y: number,
+      z: number,
+      sx: number,
+      sy: number,
+      sz: number,
+    ) => {
+      const matrix = new THREE.Matrix4().makeScale(sx, sy, sz);
+      matrix.setPosition(x, y, z);
+      batches[material].push(matrix);
+    };
+    // Cosmetic growth only: it neither changes saved blocks nor blocks movement.
+    for (const [key, type] of world.blocks) {
+      if (type !== 1) continue;
+      const [x, y, z] = key.split(",").map(Number);
+      if (world.get(x, y + 1, z) || world.get(x, y + 2, z)) continue;
+      const chance = hash(x * 3 + 8, z * 3 - 7);
+      if (chance < 0.69) continue;
+      const px = x + 0.3 + hash(x, z + 1) * 0.4,
+        pz = z + 0.3 + hash(z, x - 1) * 0.4;
+      const ground = y + 1;
+      if (chance > 0.95) {
+        add(1, px, ground + 0.1, pz, 0.09, 0.2, 0.09);
+        add(3, px, ground + 0.22, pz, 0.27, 0.1, 0.27);
+        add(1, px + 0.04, ground + 0.275, pz - 0.03, 0.065, 0.015, 0.065);
+      } else if (chance > 0.84) {
+        add(0, px, ground + 0.14, pz, 0.035, 0.28, 0.035);
+        add(1, px, ground + 0.29, pz, 0.28, 0.045, 0.09);
+        add(1, px, ground + 0.29, pz, 0.09, 0.045, 0.28);
+        add(2, px, ground + 0.32, pz, 0.085, 0.05, 0.085);
+      } else {
+        add(0, px, ground + 0.13, pz, 0.045, 0.26, 0.045);
+        add(0, px - 0.09, ground + 0.08, pz, 0.045, 0.16, 0.045);
+        add(0, px + 0.09, ground + 0.1, pz, 0.045, 0.2, 0.045);
+      }
+    }
+    batches.forEach((matrices, i) => {
+      const mesh = new THREE.InstancedMesh(
+        this.detailCube,
+        this.detailMaterials[i],
+        matrices.length,
+      );
+      matrices.forEach((matrix, index) => mesh.setMatrixAt(index, matrix));
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.receiveShadow = true;
+      mesh.computeBoundingSphere();
+      this.forestDetails.add(mesh);
     });
   }
   highlight(cell?: Cell) {

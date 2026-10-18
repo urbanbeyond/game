@@ -1,5 +1,9 @@
 export const SIZE = 28;
 export const MAX_HEIGHT = 40;
+export const PLAYER_RADIUS = 0.48;
+export const PLAYER_HEIGHT = 1.3;
+export const EDIT_REACH = 7;
+export type Position = { x: number; y: number; z: number };
 export const BLOCKS = [
   {
     id: 1,
@@ -179,24 +183,39 @@ export class World {
     return JSON.stringify({ version: 1, edits: [...this.edits.values()] });
   }
 }
-export function intersectsPlayer(
-  cell: Cell,
-  position: { x: number; y: number; z: number },
-) {
+export function intersectsPlayer(cell: Cell, position: Position) {
   return (
-    cell[0] < position.x + 0.28 &&
-    cell[0] + 1 > position.x - 0.28 &&
-    cell[1] < position.y + 1.75 &&
+    cell[0] < position.x + PLAYER_RADIUS &&
+    cell[0] + 1 > position.x - PLAYER_RADIUS &&
+    cell[1] < position.y + PLAYER_HEIGHT &&
     cell[1] + 1 > position.y &&
-    cell[2] < position.z + 0.28 &&
-    cell[2] + 1 > position.z - 0.28
+    cell[2] < position.z + PLAYER_RADIUS &&
+    cell[2] + 1 > position.z - PLAYER_RADIUS
   );
 }
 export function collides(world: World, x: number, y: number, z: number) {
-  if (Math.abs(x) > SIZE - 0.3 || Math.abs(z) > SIZE - 0.3) return true;
-  for (let bx = Math.floor(x - 0.28); bx <= Math.floor(x + 0.28); bx++)
-    for (let by = Math.floor(y + 0.001); by <= Math.floor(y + 1.75); by++)
-      for (let bz = Math.floor(z - 0.28); bz <= Math.floor(z + 0.28); bz++)
+  if (
+    x > SIZE + 1 - PLAYER_RADIUS ||
+    x < -SIZE + PLAYER_RADIUS ||
+    z > SIZE + 1 - PLAYER_RADIUS ||
+    z < -SIZE + PLAYER_RADIUS
+  )
+    return true;
+  for (
+    let bx = Math.floor(x - PLAYER_RADIUS);
+    bx <= Math.floor(x + PLAYER_RADIUS);
+    bx++
+  )
+    for (
+      let by = Math.floor(y + 0.001);
+      by <= Math.floor(y + PLAYER_HEIGHT);
+      by++
+    )
+      for (
+        let bz = Math.floor(z - PLAYER_RADIUS);
+        bz <= Math.floor(z + PLAYER_RADIUS);
+        bz++
+      )
         if (world.get(bx, by, bz)) return true;
   return false;
 }
@@ -204,7 +223,7 @@ export function trace(
   world: World,
   origin: { x: number; y: number; z: number },
   direction: { x: number; y: number; z: number },
-  reach = 7,
+  reach = EDIT_REACH,
 ): { cell: Cell; adjacent: Cell } | null {
   // Exact grid traversal, including diagonal edges, without a per-mesh raycast.
   const p = [origin.x, origin.y, origin.z];
@@ -234,4 +253,57 @@ export function trace(
     next[axis] += delta[axis];
   }
   return null;
+}
+
+/** Swept camera volume, so near-plane corners don't cut through tree trunks. */
+export function cameraClearance(
+  world: World,
+  origin: Position,
+  direction: Position,
+  distance: number,
+  radius = 0.18,
+) {
+  if (distance <= 0) return 0;
+  const steps = Math.ceil(distance / 0.1);
+  for (let i = 0; i <= steps; i++) {
+    const d = (distance * i) / steps;
+    const x = origin.x + direction.x * d,
+      y = origin.y + direction.y * d,
+      z = origin.z + direction.z * d;
+    for (let bx = Math.floor(x - radius); bx <= Math.floor(x + radius); bx++)
+      for (let by = Math.floor(y - radius); by <= Math.floor(y + radius); by++)
+        for (
+          let bz = Math.floor(z - radius);
+          bz <= Math.floor(z + radius);
+          bz++
+        )
+          if (world.get(bx, by, bz))
+            return Math.max(0, (distance * (i - 1)) / steps);
+  }
+  return distance;
+}
+
+/** Both the camera and the character must have a clear line to the edited block. */
+export function interactionTarget(
+  world: World,
+  camera: Position,
+  direction: Position,
+  eye: Position,
+) {
+  const hit = trace(world, camera, direction, EDIT_REACH + 6);
+  if (!hit) return null;
+  const dx = hit.cell[0] + 0.5 - eye.x,
+    dy = hit.cell[1] + 0.5 - eye.y,
+    dz = hit.cell[2] + 0.5 - eye.z;
+  const distance = Math.hypot(dx, dy, dz);
+  if (distance > EDIT_REACH || distance < 0.001) return null;
+  const visible = trace(
+    world,
+    eye,
+    { x: dx / distance, y: dy / distance, z: dz / distance },
+    distance + 0.01,
+  );
+  return visible && visible.cell.every((v, i) => v === hit.cell[i])
+    ? hit
+    : null;
 }

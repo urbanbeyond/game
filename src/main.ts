@@ -2,8 +2,17 @@ import "./style.css";
 import "@fontsource-variable/manrope";
 import "@fontsource-variable/dm-sans";
 import * as THREE from "three";
-import { BLOCKS, World, collides, intersectsPlayer, trace } from "./world.ts";
+import {
+  BLOCKS,
+  World,
+  PLAYER_HEIGHT,
+  collides,
+  intersectsPlayer,
+  interactionTarget,
+} from "./world.ts";
 import { GameScene } from "./scene.ts";
+import { PlayerCamera } from "./camera.ts";
+import { portraitMarkup } from "./character.ts";
 
 const cubeIcon = `<svg viewBox="0 0 32 36" fill="none" aria-hidden="true"><path d="m16 1 15 8.5L16 18 1 9.5Z" fill="currentColor"/><path d="M1 12.5 14.5 20v15L1 27.5Z" fill="currentColor" opacity=".6"/><path d="m17.5 20 13.5-7.5v15L17.5 35Z" fill="currentColor" opacity=".85"/></svg>`;
 const icon = (name: string) => {
@@ -16,6 +25,8 @@ const icon = (name: string) => {
     arrow: '<path d="M4 12h15m-6-6 6 6-6 6"/>',
     close: '<path d="m6 6 12 12M6 18 18 6"/>',
     compass: '<circle cx="12" cy="12" r="9"/><path d="m16 8-3 5-5 3 3-5Z"/>',
+    camera:
+      '<path d="M3 7h4l2-3h6l2 3h4v13H3Z"/><circle cx="12" cy="13" r="4"/>',
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] ?? ""}</svg>`;
 };
@@ -23,23 +34,24 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   <div id="viewport"></div><div class="vignette"></div>
   <header class="topbar">
     <a class="brand" href="./" aria-label="브릭랜드 홈"><span class="brand-mark">${cubeIcon}</span><span>BRICKLAND<small>A LITTLE WORLD OF YOUR OWN</small></span></a>
-    <div class="world-label"><span class="live-dot"></span>나의 첫 번째 세계<span class="divider"></span><span class="mode-label">크리에이티브</span></div>
-    <nav aria-label="게임 메뉴"><button class="icon-button" id="help" aria-label="조작 방법">${icon("help")}</button><button class="icon-button" id="settings" aria-label="설정">${icon("settings")}</button><button class="save-button" id="save">${icon("save")}<span>세계 저장</span></button></nav>
+    <div class="world-label"><span class="live-dot"></span>히나냥의 숲<span class="divider"></span><span class="mode-label" id="camera-mode">3인칭 탐험</span></div>
+    <nav aria-label="게임 메뉴"><button class="icon-button" id="camera-toggle" aria-label="시점 전환" title="시점 전환 (V)">${icon("camera")}</button><button class="icon-button" id="help" aria-label="조작 방법">${icon("help")}</button><button class="icon-button" id="settings" aria-label="설정">${icon("settings")}</button><button class="save-button" id="save">${icon("save")}<span>세계 저장</span></button></nav>
   </header>
-  <aside class="world-info"><span class="eyebrow">THE OVERWORLD</span><div>${icon("sun")} 햇살 가득한 초원</div><p><span class="live-dot"></span> <span id="save-status">로컬 자동 저장</span></p></aside>
+  <aside class="world-info"><span class="eyebrow">HINANYANG’S FOREST</span><div>${icon("sun")} 풀꽃이 피어나는 초록 숲</div><p><span class="live-dot"></span> <span id="save-status">로컬 자동 저장</span></p></aside>
   <div class="location"><span class="compass-icon">${icon("compass")}</span><span><b id="heading">N</b><small id="coordinates">12 / 8 / 17</small></span></div>
   <main class="welcome" id="welcome">
-    <div class="welcome-tag"><span></span>상상하는 대로, 쌓아보세요</div>
-    <h1>작은 블록,<br>무한한 <em>세계.</em></h1>
-    <p class="intro">숲을 거닐고, 블록을 쌓고.<br>아무것도 정해지지 않은 이곳에서<br>당신만의 이야기를 만들어보세요.</p>
-    <button class="play-button" id="play"><span id="play-label">세계에 들어가기</span>${icon("arrow")}</button>
+    <div class="welcome-tag"><span></span>작은 발걸음으로 시작하는 모험</div>
+    <h1>히나냥의<br><em>숲속 모험.</em></h1>
+    <p class="intro">주황빛 작은 친구와 초록 숲을 걸어요.<br>풀꽃 사이를 뛰어다니고, 블록을 쌓으며<br>우리만의 산책길을 만들어보세요.</p>
+    <button class="play-button" id="play"><span id="play-label">숲으로 출발하기</span>${icon("arrow")}</button>
     <p class="play-note"><span class="key-mini">W A S D</span> 이동 <span class="dot">·</span> 마우스로 둘러보기</p>
   </main>
-  <div class="scene-caption" id="scene-caption"><span class="caption-line"></span>YOUR NEXT ADVENTURE<br><strong>STARTS WITH A BLOCK.</strong></div>
+  <div class="scene-caption" id="scene-caption"><span class="caption-line"></span>A LITTLE FRIEND.<br><strong>A WHOLE FOREST TO EXPLORE.</strong></div>
+  <aside class="character-card" aria-label="플레이어 캐릭터">${portraitMarkup()}<div><span class="eyebrow">YOUR LITTLE EXPLORER</span><strong>히나냥 <span id="character-state">산책 준비 중</span></strong></div></aside>
   <div id="crosshair" hidden><i></i><i></i></div><div id="target-label" hidden></div>
   <div class="toolbar-wrap"><div class="toolbar-title"><span>나만의 팔레트</span><span id="selected-name">잔디 블록</span><span class="infinite">∞</span></div><div class="toolbar" role="toolbar" aria-label="블록 선택">${BLOCKS.map((b, i) => `<button class="slot ${i === 0 ? "active" : ""}" data-block="${i}" aria-label="${b.name} 블록" aria-pressed="${i === 0}"><span class="slot-number">${i + 1}</span><span class="block-cube" style="--top:${b.top};--side:${b.side};--front:${b.color}"><i></i><i></i><i></i></span><span class="slot-name">${b.name}</span></button>`).join("")}</div><span class="toolbar-hint">숫자 1–7 또는 마우스 휠로 블록 선택</span></div>
-  <footer><div><span class="footer-dot"></span>자유롭게 만들고, 느긋하게 즐기세요.</div><button id="controls-link">${icon("help")} 조작 가이드 <kbd>H</kbd></button></footer>
-  <div class="play-hints" id="play-hints" hidden><span><kbd>좌클릭</kbd> 부수기</span><span><kbd>우클릭</kbd> 쌓기</span><span><kbd>Space</kbd> 점프</span><span><kbd>Esc</kbd> 메뉴</span></div>
+  <footer><div><span class="footer-dot"></span>오늘은 히나냥과 어디까지 걸어볼까요?</div><button id="controls-link">${icon("help")} 조작 가이드 <kbd>H</kbd></button></footer>
+  <div class="play-hints" id="play-hints" hidden><span><kbd>좌클릭</kbd> 부수기</span><span><kbd>우클릭</kbd> 쌓기</span><span><kbd>Space</kbd> 점프</span><span><kbd>V</kbd> 시점 전환</span><span><kbd>Esc</kbd> 메뉴</span></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <dialog id="modal"><button class="modal-close icon-button" aria-label="닫기">${icon("close")}</button><div id="modal-content"></div></dialog>
 `;
@@ -65,16 +77,20 @@ try {
   throw new Error("WebGL initialization failed");
 }
 const camera = view.camera;
+const playerCamera = new PlayerCamera();
 const player = new THREE.Vector3(12.5, world.surface(12, 17), 17.5);
 const direction = new THREE.Vector3();
 const velocity = new THREE.Vector3();
+const oldPosition = new THREE.Vector3();
+const motion = new THREE.Vector3();
+const eye = new THREE.Vector3();
 let yaw = 0.45,
-  pitch = -0.16,
+  pitch = -0.22,
   selected = 0,
   grounded = false,
   playing = false,
   started = false;
-let target: ReturnType<typeof trace> = null;
+let target: ReturnType<typeof interactionTarget> = null;
 let sensitivity = 1;
 let lastTime = performance.now(),
   elapsed = 0,
@@ -150,10 +166,29 @@ document.addEventListener("mousemove", (e) => {
   if (!playing) return;
   yaw -= e.movementX * 0.002 * sensitivity;
   pitch = Math.max(
-    -1.5,
-    Math.min(1.5, pitch - e.movementY * 0.002 * sensitivity),
+    playerCamera.mode === "third" ? -1.15 : -1.5,
+    Math.min(
+      playerCamera.mode === "third" ? 0.6 : 1.5,
+      pitch - e.movementY * 0.002 * sensitivity,
+    ),
   );
 });
+function toggleCamera() {
+  playerCamera.toggle();
+  pitch = Math.max(-1.15, Math.min(0.6, pitch));
+  $("#camera-mode").textContent =
+    playerCamera.mode === "third" ? "3인칭 탐험" : "1인칭 만들기";
+  $("#camera-toggle").setAttribute(
+    "aria-pressed",
+    String(playerCamera.mode === "first"),
+  );
+  toast(
+    playerCamera.mode === "third"
+      ? "히나냥을 따라가는 3인칭 시점"
+      : "블록을 가까이 보는 1인칭 시점 · V로 돌아가기",
+  );
+}
+$("#camera-toggle").addEventListener("click", toggleCamera);
 function edit(place: boolean) {
   if (!playing || !target) return;
   const cell = place ? target.adjacent : target.cell;
@@ -197,6 +232,7 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
   if (/^Digit[1-7]$/.test(e.code)) select(Number(e.code.slice(-1)) - 1);
   if (e.code === "KeyH" && !e.repeat) showHelp();
+  if (e.code === "KeyV" && !e.repeat) toggleCamera();
   if (playing) keys.add(e.code);
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
@@ -232,7 +268,7 @@ function showModal(content: string) {
 }
 function showHelp() {
   showModal(
-    `<span class="eyebrow">MAKE YOURSELF AT HOME</span><h2>모험을 위한 작은 안내서</h2><p>블록은 무제한이에요. 마음껏 부수고, 쌓고, 만들어보세요.</p><div class="control-list">${[
+    `<span class="eyebrow">MAKE YOURSELF AT HOME</span><h2>모험을 위한 작은 안내서</h2><p>히나냥과 숲을 걸어요! 멈춘 채 마우스를 돌리면 얼굴도 볼 수 있어요. 블록은 무제한입니다.</p><div class="control-list">${[
       ["W A S D / 방향키", "앞뒤, 좌우로 이동"],
       ["마우스", "주변 둘러보기"],
       ["Space", "점프"],
@@ -240,6 +276,7 @@ function showHelp() {
       ["마우스 왼쪽", "바라보는 블록 부수기"],
       ["마우스 오른쪽", "선택한 블록 쌓기"],
       ["1 – 7 / 마우스 휠", "블록 종류 선택"],
+      ["V", "3인칭 탐험 / 1인칭 만들기 전환"],
       ["Esc", "일시 정지 · 마우스 해제"],
     ]
       .map(
@@ -288,11 +325,12 @@ function respawn() {
   player.set(12.5, world.surface(12, 17), 17.5);
   velocity.set(0, 0, 0);
   yaw = 0.45;
-  pitch = -0.16;
+  pitch = -0.22;
 }
 function updateTarget() {
   camera.getWorldDirection(direction);
-  target = trace(world, camera.position, direction);
+  eye.set(player.x, player.y + PLAYER_HEIGHT - 0.15, player.z);
+  target = interactionTarget(world, camera.position, direction, eye);
   view.highlight(target?.cell);
   $("#target-label").hidden = !target;
   if (target)
@@ -352,16 +390,30 @@ function frame(now: number) {
   elapsed += dt;
   uiTime += dt;
   if (playing) {
+    oldPosition.copy(player);
     physics(dt);
-    camera.position.set(player.x, player.y + 1.62, player.z);
-    camera.rotation.set(pitch, yaw, 0, "YXZ");
+    motion.copy(player).sub(oldPosition).divideScalar(Math.max(dt, 0.001));
+    view.character.update(dt, elapsed, player, motion, grounded);
+    playerCamera.update(camera, world, player, yaw, pitch, dt);
+    view.character.root.visible =
+      playerCamera.mode === "third" && playerCamera.distance > 0.7;
     updateTarget();
   } else if (!started) {
-    camera.position.set(37 + Math.sin(elapsed * 0.035) * 2, 28, 39);
-    camera.lookAt(-8, 4, 0);
+    motion.set(0, 0, 0);
+    view.character.update(dt, elapsed, player, motion, true);
+    view.character.root.visible = true;
+    camera.position.set(
+      player.x + 3.8 + Math.sin(elapsed * 0.12) * 0.25,
+      player.y + 2.8,
+      player.z + 5.3,
+    );
+    camera.lookAt(player.x - 1.5, player.y + 0.7, player.z);
   } else {
-    camera.position.set(player.x, player.y + 1.62, player.z);
-    camera.rotation.set(pitch, yaw, 0, "YXZ");
+    motion.set(0, 0, 0);
+    view.character.update(dt, elapsed, player, motion, grounded);
+    playerCamera.update(camera, world, player, yaw, pitch, dt);
+    view.character.root.visible =
+      playerCamera.mode === "third" && playerCamera.distance > 0.7;
   }
   if (uiTime > 0.15) {
     uiTime = 0;
@@ -371,6 +423,16 @@ function frame(now: number) {
     $("#heading").textContent = ["N", "W", "S", "E"][
       Math.round(bearing / 90) % 4
     ];
+    $("#character-state").textContent = !started
+      ? "산책 준비 중"
+      : !playing
+        ? "잠깐 쉬는 중"
+        : {
+            idle: "숲을 둘러보는 중",
+            walk: "사뿐사뿐 걷는 중",
+            run: "신나게 달리는 중",
+            jump: "폴짝!",
+          }[view.character.state];
   }
   view.render(elapsed);
   requestAnimationFrame(frame);
@@ -385,6 +447,16 @@ if (import.meta.env.DEV)
       selected,
       player: player.toArray(),
       grounded,
+      cameraMode: playerCamera.mode,
+      cameraPosition: camera.position.toArray(),
+      cameraDistance: playerCamera.distance,
+      character: {
+        visible: view.character.root.visible,
+        position: view.character.root.position.toArray(),
+        state: view.character.state,
+        heading: view.character.heading,
+        gait: view.character.gait,
+      },
       target: target
         ? { cell: [...target.cell], adjacent: [...target.adjacent] }
         : null,

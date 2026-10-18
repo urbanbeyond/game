@@ -55,22 +55,38 @@ try {
   await mkdir(".artifacts", { recursive: true });
   await page.screenshot({ path: ".artifacts/welcome.png" });
   assert.ok((await page.evaluate(() => window.__brickland.blockCount)) > 10000);
+  assert.equal(
+    await page.evaluate(() => window.__brickland.character.visible),
+    true,
+  );
+  assert.equal(
+    await page.evaluate(() => window.__brickland.cameraMode),
+    "third",
+  );
   console.log("PASS: WebGL scene renders the generated world");
 
   await page.getByRole("button", { name: "조작 방법", exact: true }).click();
   await page.getByText("모험을 위한 작은 안내서").waitFor();
   await page.getByRole("button", { name: "닫기", exact: true }).click();
   await page
-    .getByRole("button", { name: "세계에 들어가기", exact: true })
+    .getByRole("button", { name: "숲으로 출발하기", exact: true })
     .click();
   await page.waitForFunction(() => window.__brickland.playing);
   await page.waitForFunction(() => window.__brickland.grounded);
+  assert.equal(
+    await page.evaluate(() => window.__brickland.character.visible),
+    true,
+  );
   const initial = await page.evaluate(() => window.__brickland.player);
   await page.keyboard.down("w");
   await page.waitForFunction((p) => {
     const current = window.__brickland.player;
     return Math.hypot(current[0] - p[0], current[2] - p[2]) > 0.3;
   }, initial);
+  assert.equal(
+    await page.evaluate(() => window.__brickland.character.state),
+    "walk",
+  );
   await page.keyboard.up("w");
   const moved = await page.evaluate(() => window.__brickland.player);
   assert.ok(
@@ -87,7 +103,14 @@ try {
     "Space jumps",
   );
   await page.waitForFunction(() => window.__brickland.grounded);
-  console.log("PASS: pointer lock, movement, gravity, landing, and jumping");
+  assert.deepEqual(
+    await page.evaluate(() => window.__brickland.character.position),
+    await page.evaluate(() => window.__brickland.player),
+  );
+  await page.screenshot({ path: ".artifacts/forest-exploration.png" });
+  console.log(
+    "PASS: third-person character, animated walking, following camera, gravity, landing, and jumping",
+  );
 
   await page.keyboard.press("7");
   assert.equal(await page.evaluate(() => window.__brickland.selected), 6);
@@ -115,13 +138,39 @@ try {
     (count) => window.__brickland.blockCount === count,
     before,
   );
+  // Leave a real placed block in the world to verify restoration, not just a no-op edit.
+  await page.mouse.down({ button: "right" });
+  await page.mouse.up({ button: "right" });
+  await page.waitForFunction(
+    (count) => window.__brickland.blockCount === count + 1,
+    before,
+  );
   await page.waitForTimeout(700);
   const edits = await page.evaluate(() => window.__brickland.edits);
   assert.ok(edits.length > 0);
   await page.screenshot({ path: ".artifacts/playing.png" });
   console.log(
-    "PASS: material selection, right-click placement, left-click mining, autosave",
+    "PASS: third-person material selection, right-click placement, left-click mining, autosave",
   );
+
+  const beforeSwitch = await page.evaluate(() => window.__brickland.player);
+  await page.keyboard.press("v");
+  await page.waitForFunction(
+    () =>
+      window.__brickland.cameraMode === "first" &&
+      !window.__brickland.character.visible,
+  );
+  assert.deepEqual(
+    await page.evaluate(() => window.__brickland.player),
+    beforeSwitch,
+  );
+  await page.keyboard.press("v");
+  await page.waitForFunction(
+    () =>
+      window.__brickland.cameraMode === "third" &&
+      window.__brickland.character.visible,
+  );
+  console.log("PASS: first-/third-person toggle preserves player position");
 
   await page.evaluate(() => document.exitPointerLock());
   await page.getByRole("button", { name: "설정", exact: true }).click();
@@ -130,6 +179,10 @@ try {
   await page.reload();
   await page.waitForFunction(() => window.__brickland?.triangles > 1000);
   assert.deepEqual(await page.evaluate(() => window.__brickland.edits), edits);
+  assert.equal(
+    await page.evaluate(() => window.__brickland.blockCount),
+    before + 1,
+  );
   console.log("PASS: saved block edits are restored after reload");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: ".artifacts/mobile.png" });

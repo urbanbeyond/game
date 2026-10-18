@@ -1,4 +1,55 @@
 /* Fonts are bundled locally; gameplay needs no external network requests. */
+.pixel-portrait {
+  display: grid;
+  grid-template-columns: repeat(11, 4px);
+  grid-template-rows: repeat(6, 4px);
+  flex-shrink: 0;
+  filter: drop-shadow(0 3px 0 #aa6e3125);
+}
+.pixel-portrait i {
+  display: block;
+}
+.character-card {
+  position: fixed;
+  left: 42px;
+  bottom: 82px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 17px 18px;
+  background: #f8f5eae8;
+  border: 1px solid #ffffffe0;
+  border-radius: 12px;
+  box-shadow: 0 4px 22px #354c2a18;
+  backdrop-filter: blur(10px);
+}
+.character-card .eyebrow {
+  font-size: 7px;
+  letter-spacing: 1.3px;
+  color: #9b875b;
+}
+.character-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: #425237;
+}
+.character-card strong span {
+  font-size: 9px;
+  font-weight: 400;
+  color: #859177;
+  margin-left: 7px;
+}
+@media (max-width: 1100px) {
+  .character-card {
+    display: none;
+  }
+}
+@media (max-width: 420px) {
+  #camera-toggle {
+    display: none;
+  }
+}
 .playing .play-hints {
   bottom: 210px;
 }
