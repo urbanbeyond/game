@@ -44,6 +44,19 @@ npm run preview  # 프로덕션 빌드 로컬 확인
 
 `dist/`를 정적 호스팅에 배포하면 됩니다. 모든 게임 에셋과 글꼴은 로컬 번들에 포함되며 게임 중 외부 서비스 호출은 없습니다. HTTPS 또는 localhost에서 실행하세요.
 
+## 온라인에서 실행하기 — GitHub Pages
+
+자동 배포 파일은 `.github/workflows/deploy-pages.yml`입니다. 저장소 관리자가 최초 한 번 다음 설정을 완료해야 합니다.
+
+1. GitHub 저장소의 **Settings → Pages**를 엽니다.
+2. **Build and deployment → Source**를 **GitHub Actions**로 선택합니다.
+3. **Actions → Deploy game to GitHub Pages → Run workflow**에서 `main`을 선택하고 실행합니다. 활성화 전에 실패한 실행이 있다면 **Re-run all jobs**로 다시 실행해도 됩니다.
+4. `build`와 `deploy`가 모두 초록색 체크로 완료되면 `https://urbanbeyond.github.io/game/`에서 플레이합니다.
+
+이후 `main`에 변경 사항을 push하면 테스트와 빌드를 거쳐 자동으로 재배포됩니다. 방문자는 Git이나 Node.js를 설치할 필요가 없습니다. 비공개 저장소는 계정/조직의 요금제가 Pages를 지원해야 합니다. 지원되지 않더라도 저장소 공개 여부는 별도로 결정해야 합니다.
+
+`vite.config.ts`는 상대 에셋 경로를 사용하므로 `/game/` 아래에서도 게임 코드, 글꼴과 아이콘을 정상적으로 불러옵니다. 로컬 개발 명령은 그대로입니다. 온라인 사이트의 저장 데이터는 로컬 개발 주소와 공유되지 않습니다.
+
 ## 구성
 
 - `src/world.ts`: 결정적 지형 생성, 블록 편집/저장 검증, 충돌과 그리드 레이캐스트
