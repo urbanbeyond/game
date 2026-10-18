@@ -52,12 +52,14 @@ try {
   await page.goto(url);
   await page.waitForFunction(() => window.__brickland?.triangles > 1000);
   await page.evaluate(() => document.fonts.ready);
+  await page.waitForFunction(() => document.querySelector('#hero-character').naturalWidth > 0);
+  assert.match(await page.title(), /HINANYANG LAND/);
   await mkdir(".artifacts", { recursive: true });
   await page.screenshot({ path: ".artifacts/welcome.png" });
   assert.ok((await page.evaluate(() => window.__brickland.blockCount)) > 10000);
   assert.equal(
     await page.evaluate(() => window.__brickland.character.visible),
-    true,
+    false,
   );
   assert.equal(
     await page.evaluate(() => window.__brickland.cameraMode),

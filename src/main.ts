@@ -32,25 +32,26 @@ const icon = (name: string) => {
 };
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   <div id="viewport"></div><div class="vignette"></div>
+  <img id="hero-character" class="hero-character" src="${import.meta.env.BASE_URL}hinanyang-explorer.png" alt="초록 배낭을 메고 숲으로 모험을 떠나는 희나냥" />
   <header class="topbar">
-    <a class="brand" href="./" aria-label="브릭랜드 홈"><span class="brand-mark">${cubeIcon}</span><span>BRICKLAND<small>A LITTLE WORLD OF YOUR OWN</small></span></a>
-    <div class="world-label"><span class="live-dot"></span>히나냥의 숲<span class="divider"></span><span class="mode-label" id="camera-mode">3인칭 탐험</span></div>
+    <a class="brand" href="./" aria-label="HINANYANG LAND 홈"><span class="brand-mark">${cubeIcon}</span><span>HINANYANG LAND<small>A LITTLE WORLD OF YOUR OWN</small></span></a>
+    <div class="world-label"><span class="live-dot"></span>희나냥의 숲<span class="divider"></span><span class="mode-label" id="camera-mode">3인칭 탐험</span></div>
     <nav aria-label="게임 메뉴"><button class="icon-button" id="camera-toggle" aria-label="시점 전환" title="시점 전환 (V)">${icon("camera")}</button><button class="icon-button" id="help" aria-label="조작 방법">${icon("help")}</button><button class="icon-button" id="settings" aria-label="설정">${icon("settings")}</button><button class="save-button" id="save">${icon("save")}<span>세계 저장</span></button></nav>
   </header>
   <aside class="world-info"><span class="eyebrow">HINANYANG’S FOREST</span><div>${icon("sun")} 풀꽃이 피어나는 초록 숲</div><p><span class="live-dot"></span> <span id="save-status">로컬 자동 저장</span></p></aside>
   <div class="location"><span class="compass-icon">${icon("compass")}</span><span><b id="heading">N</b><small id="coordinates">12 / 8 / 17</small></span></div>
   <main class="welcome" id="welcome">
     <div class="welcome-tag"><span></span>작은 발걸음으로 시작하는 모험</div>
-    <h1>히나냥의<br><em>숲속 모험.</em></h1>
+    <h1>HINANYANG<br><em>LAND</em></h1>
     <p class="intro">주황빛 작은 친구와 초록 숲을 걸어요.<br>풀꽃 사이를 뛰어다니고, 블록을 쌓으며<br>우리만의 산책길을 만들어보세요.</p>
     <button class="play-button" id="play"><span id="play-label">숲으로 출발하기</span>${icon("arrow")}</button>
     <p class="play-note"><span class="key-mini">W A S D</span> 이동 <span class="dot">·</span> 마우스로 둘러보기</p>
   </main>
   <div class="scene-caption" id="scene-caption"><span class="caption-line"></span>A LITTLE FRIEND.<br><strong>A WHOLE FOREST TO EXPLORE.</strong></div>
-  <aside class="character-card" aria-label="플레이어 캐릭터">${portraitMarkup()}<div><span class="eyebrow">YOUR LITTLE EXPLORER</span><strong>히나냥 <span id="character-state">산책 준비 중</span></strong></div></aside>
+  <aside class="character-card" aria-label="플레이어 캐릭터">${portraitMarkup()}<div><span class="eyebrow">YOUR LITTLE EXPLORER</span><strong>희나냥 <span id="character-state">산책 준비 중</span></strong></div></aside>
   <div id="crosshair" hidden><i></i><i></i></div><div id="target-label" hidden></div>
   <div class="toolbar-wrap"><div class="toolbar-title"><span>나만의 팔레트</span><span id="selected-name">잔디 블록</span><span class="infinite">∞</span></div><div class="toolbar" role="toolbar" aria-label="블록 선택">${BLOCKS.map((b, i) => `<button class="slot ${i === 0 ? "active" : ""}" data-block="${i}" aria-label="${b.name} 블록" aria-pressed="${i === 0}"><span class="slot-number">${i + 1}</span><span class="block-cube" style="--top:${b.top};--side:${b.side};--front:${b.color}"><i></i><i></i><i></i></span><span class="slot-name">${b.name}</span></button>`).join("")}</div><span class="toolbar-hint">숫자 1–7 또는 마우스 휠로 블록 선택</span></div>
-  <footer><div><span class="footer-dot"></span>오늘은 히나냥과 어디까지 걸어볼까요?</div><button id="controls-link">${icon("help")} 조작 가이드 <kbd>H</kbd></button></footer>
+  <footer><div><span class="footer-dot"></span>오늘은 희나냥과 어디까지 걸어볼까요?</div><button id="controls-link">${icon("help")} 조작 가이드 <kbd>H</kbd></button></footer>
   <div class="play-hints" id="play-hints" hidden><span><kbd>좌클릭</kbd> 부수기</span><span><kbd>우클릭</kbd> 쌓기</span><span><kbd>Space</kbd> 점프</span><span><kbd>V</kbd> 시점 전환</span><span><kbd>Esc</kbd> 메뉴</span></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <dialog id="modal"><button class="modal-close icon-button" aria-label="닫기">${icon("close")}</button><div id="modal-content"></div></dialog>
@@ -131,6 +132,7 @@ function setPlaying(value: boolean) {
   keys.clear();
   $("#welcome").hidden = value;
   $("#scene-caption").hidden = value || started;
+  $("#hero-character").hidden = value || started;
   $("#crosshair").hidden = !value;
   $("#play-hints").hidden = !value;
   document.body.classList.toggle("playing", value);
@@ -184,7 +186,7 @@ function toggleCamera() {
   );
   toast(
     playerCamera.mode === "third"
-      ? "히나냥을 따라가는 3인칭 시점"
+      ? "희나냥을 따라가는 3인칭 시점"
       : "블록을 가까이 보는 1인칭 시점 · V로 돌아가기",
   );
 }
@@ -268,7 +270,7 @@ function showModal(content: string) {
 }
 function showHelp() {
   showModal(
-    `<span class="eyebrow">MAKE YOURSELF AT HOME</span><h2>모험을 위한 작은 안내서</h2><p>히나냥과 숲을 걸어요! 멈춘 채 마우스를 돌리면 얼굴도 볼 수 있어요. 블록은 무제한입니다.</p><div class="control-list">${[
+    `<span class="eyebrow">MAKE YOURSELF AT HOME</span><h2>모험을 위한 작은 안내서</h2><p>희나냥과 숲을 걸어요! 멈춘 채 마우스를 돌리면 얼굴도 볼 수 있어요. 블록은 무제한입니다.</p><div class="control-list">${[
       ["W A S D / 방향키", "앞뒤, 좌우로 이동"],
       ["마우스", "주변 둘러보기"],
       ["Space", "점프"],
@@ -401,7 +403,8 @@ function frame(now: number) {
   } else if (!started) {
     motion.set(0, 0, 0);
     view.character.update(dt, elapsed, player, motion, true);
-    view.character.root.visible = true;
+    const hero = $<HTMLImageElement>("#hero-character");
+    view.character.root.visible = !(hero.complete && hero.naturalWidth > 0);
     camera.position.set(
       player.x + 3.8 + Math.sin(elapsed * 0.12) * 0.25,
       player.y + 2.8,

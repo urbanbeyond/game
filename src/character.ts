@@ -12,7 +12,7 @@ export const FACE_PIXELS = [
 ] as const;
 export const CHARACTER_COLORS = { O: "#ff8a00", K: "#080b07", W: "#fffdf0" };
 export function portraitMarkup() {
-  return `<span class="pixel-portrait" role="img" aria-label="주황색 픽셀 캐릭터 히나냥">${FACE_PIXELS.flatMap((row) => [...row].map((pixel) => `<i style="background:${CHARACTER_COLORS[pixel as keyof typeof CHARACTER_COLORS]}"></i>`)).join("")}</span>`;
+  return `<span class="pixel-portrait" role="img" aria-label="주황색 픽셀 캐릭터 희나냥">${FACE_PIXELS.flatMap((row) => [...row].map((pixel) => `<i style="background:${CHARACTER_COLORS[pixel as keyof typeof CHARACTER_COLORS]}"></i>`)).join("")}</span>`;
 }
 
 export class ForestCharacter {
@@ -31,6 +31,7 @@ export class ForestCharacter {
     emissiveIntensity: 0.12,
   });
   private dark = new THREE.MeshLambertMaterial({ color: "#171b13" });
+  private headBlack = new THREE.MeshLambertMaterial({ color: CHARACTER_COLORS.K });
   private cream = new THREE.MeshLambertMaterial({ color: "#fff1d4" });
 
   constructor() {
@@ -40,17 +41,14 @@ export class ForestCharacter {
     // Keep the sticker's broad rectangular silhouette, with small paws and a tail.
     this.box(this.body, this.orange, [0, 0.43, 0], [0.51, 0.38, 0.4]);
     this.box(this.body, this.cream, [0, 0.4, 0.205], [0.27, 0.23, 0.015]);
-    this.box(this.body, this.orange, [0, 0.88, 0], [0.99, 0.54, 0.53]);
-    this.box(this.body, this.dark, [0, 0.655, 0], [0.99, 0.09, 0.55]);
-    // Back markings make the character recognizable while the camera follows it.
-    for (const x of [-0.27, 0, 0.27]) {
-      this.box(
-        this.body,
-        this.dark,
-        [x, 0.995, -0.272],
-        [0.09, x === 0 ? 0.3 : 0.18, 0.012],
-      );
-    }
+    // Box face order: right, left, top, bottom, front, back.
+    this.box(
+      this.body,
+      [this.headBlack, this.headBlack, this.orange, this.headBlack, this.orange, this.headBlack],
+      [0, 0.88, 0],
+      [0.99, 0.54, 0.53],
+    );
+    this.box(this.body, this.headBlack, [0, 0.655, 0], [0.99, 0.09, 0.55]);
     const pixelGeometry = new THREE.BoxGeometry(0.09, 0.09, 0.018);
     const matrix = new THREE.Matrix4();
     for (const [symbol, color] of Object.entries(CHARACTER_COLORS)) {
@@ -75,15 +73,15 @@ export class ForestCharacter {
       this.box(foot, this.orange, [0, 0.01, 0], [0.2, 0.29, 0.26]);
       this.box(foot, this.dark, [0, -0.11, 0.035], [0.21, 0.08, 0.33]);
     }
-    this.tail.position.set(0.15, 0.34, -0.21);
+    this.tail.position.set(0, 0.34, -0.21);
     this.body.add(this.tail);
     this.box(this.tail, this.orange, [0, 0.03, -0.14], [0.16, 0.16, 0.3]);
-    this.box(this.tail, this.orange, [0.08, 0.13, -0.32], [0.16, 0.3, 0.16]);
-    this.box(this.tail, this.dark, [0.08, 0.3, -0.32], [0.16, 0.12, 0.16]);
+    this.box(this.tail, this.orange, [0, 0.13, -0.32], [0.16, 0.3, 0.16]);
+    this.box(this.tail, this.dark, [0, 0.3, -0.32], [0.16, 0.12, 0.16]);
   }
   private box(
     group: THREE.Group,
-    material: THREE.Material,
+    material: THREE.Material | THREE.Material[],
     position: number[],
     size: number[],
   ) {

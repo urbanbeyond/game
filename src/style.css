@@ -324,6 +324,30 @@ nav {
   z-index: 4;
   max-width: 420px;
 }
+.hero-character {
+  position: absolute;
+  z-index: 2;
+  right: 8vw;
+  bottom: 22%;
+  width: min(46vw, 590px);
+  height: min(64vh, 640px);
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 20px 16px #15281535);
+}
+.hero-character[hidden] { display: none; }
+.brand { white-space: nowrap; }
+@media (max-width: 700px) {
+  .hero-character {
+    right: 0;
+    bottom: 25%;
+    width: 43vw;
+    height: 30vh;
+  }
+  .topbar .brand { font-size: 14px; letter-spacing: 0; gap: 7px; }
+  .topbar .brand-mark { width: 22px; }
+  .welcome h1 { font-size: 38px; letter-spacing: -2px; }
+}
 .welcome-tag {
   font-size: 10px;
   letter-spacing: 1.2px;

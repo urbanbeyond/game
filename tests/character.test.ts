@@ -31,6 +31,17 @@ test("character keeps the supplied pixel face and animates actual movement", () 
   assert.equal(character.state, "jump");
 });
 
+test("head sides and back stay black and tail is centered", () => {
+  const character = new ForestCharacter();
+  const head = character.body.children.find(child => child instanceof THREE.Mesh && Array.isArray(child.material)) as THREE.Mesh;
+  assert.ok(head);
+  const materials = head.material as THREE.MeshLambertMaterial[];
+  for (const face of [0, 1, 5]) assert.equal(materials[face].color.getHexString(), "080b07");
+  assert.equal(materials[2].color.getHexString(), "ff8a00");
+  assert.equal(character.tail.position.x, 0);
+  for (const piece of character.tail.children) assert.equal(piece.position.x, 0);
+});
+
 test("camera volume stops before walls and overhead leaves, and restores its distance", () => {
   const world = new World();
   world.blocks.clear();
