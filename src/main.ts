@@ -1,4 +1,5 @@
 import "./style.css";
+import "./touch.css";
 import "@fontsource-variable/manrope";
 import "@fontsource-variable/dm-sans";
 import * as THREE from "three";
@@ -13,6 +14,12 @@ import {
 import { GameScene } from "./scene.ts";
 import { PlayerCamera } from "./camera.ts";
 import { portraitMarkup } from "./character.ts";
+import { TouchControls } from "./touch.ts";
+import { DroppedItems } from "./items.ts";
+
+const touchMode = matchMedia("(pointer: coarse)").matches ||
+  (navigator.maxTouchPoints > 0 && !matchMedia("(any-pointer: fine)").matches);
+document.body.classList.toggle("touch-mode", touchMode);
 
 const cubeIcon = `<svg viewBox="0 0 32 36" fill="none" aria-hidden="true"><path d="m16 1 15 8.5L16 18 1 9.5Z" fill="currentColor"/><path d="M1 12.5 14.5 20v15L1 27.5Z" fill="currentColor" opacity=".6"/><path d="m17.5 20 13.5-7.5v15L17.5 35Z" fill="currentColor" opacity=".85"/></svg>`;
 const icon = (name: string) => {
@@ -53,6 +60,13 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   <div class="toolbar-wrap"><div class="toolbar-title"><span>나만의 팔레트</span><span id="selected-name">잔디 블록</span><span class="infinite">∞</span></div><div class="toolbar" role="toolbar" aria-label="블록 선택">${BLOCKS.map((b, i) => `<button class="slot ${i === 0 ? "active" : ""}" data-block="${i}" aria-label="${b.name} 블록" aria-pressed="${i === 0}"><span class="slot-number">${i + 1}</span><span class="block-cube" style="--top:${b.top};--side:${b.side};--front:${b.color}"><i></i><i></i><i></i></span><span class="slot-name">${b.name}</span></button>`).join("")}</div><span class="toolbar-hint">숫자 1–7 또는 마우스 휠로 블록 선택</span></div>
   <footer><div><span class="footer-dot"></span>오늘은 희나냥과 어디까지 걸어볼까요?</div><button id="controls-link">${icon("help")} 조작 가이드 <kbd>H</kbd></button></footer>
   <div class="play-hints" id="play-hints" hidden><span><kbd>좌클릭</kbd> 부수기</span><span><kbd>우클릭</kbd> 쌓기</span><span><kbd>Space</kbd> 점프</span><span><kbd>V</kbd> 시점 전환</span><span><kbd>Esc</kbd> 메뉴</span></div>
+  <div id="touch-controls" hidden>
+    <div id="joystick" role="group" aria-label="이동 조이스틱"><span id="joystick-knob"></span><small>이동 · 두 번 ↑ 달리기</small></div>
+    <button id="touch-jump" aria-label="점프">↑</button>
+    <button id="inventory-button" aria-label="인벤토리 열기">•••<small>보관함</small></button>
+    <button id="touch-pause" aria-label="일시 정지">Ⅱ</button>
+    <span class="touch-hint">드래그: 시점 · 짧게 탭: 설치 · 길게: 파괴<br><b id="touch-selected">손에 든 블록: 잔디 · ∞</b></span>
+  </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <dialog id="modal"><button class="modal-close icon-button" aria-label="닫기">${icon("close")}</button><div id="modal-content"></div></dialog>
 `;
@@ -78,6 +92,15 @@ try {
   throw new Error("WebGL initialization failed");
 }
 const camera = view.camera;
+if (touchMode) {
+  view.quality(false);
+  $(".play-note").textContent = "왼쪽 패드로 이동 · 화면을 드래그해 둘러보기";
+}
+const items = new DroppedItems(view.scene);
+const inventoryKey = "hinanyang-inventory-v1";
+try { items.restore(localStorage.getItem(inventoryKey) || ""); } catch {}
+let touch: TouchControls | undefined;
+let jumpRequested = false;
 const playerCamera = new PlayerCamera();
 const player = new THREE.Vector3(12.5, world.surface(12, 17), 17.5);
 const direction = new THREE.Vector3();
@@ -110,6 +133,7 @@ function toast(message: string) {
 function save(notify = false) {
   try {
     localStorage.setItem(storageKey, world.serialize());
+    localStorage.setItem(inventoryKey, items.serialize());
     storageAvailable = true;
     $("#save-status").textContent = "모든 변경 사항 저장됨";
     if (notify) toast("세계가 이 브라우저에 저장되었습니다.");
@@ -126,15 +150,19 @@ function select(index: number) {
     slot.setAttribute("aria-pressed", String(i === selected));
   });
   $("#selected-name").textContent = `${BLOCKS[selected].name} 블록`;
+  $("#touch-selected").textContent = `손에 든 블록: ${BLOCKS[selected].name} · ∞`;
 }
 function setPlaying(value: boolean) {
   playing = value;
   keys.clear();
+  touch?.reset();
+  jumpRequested = false;
   $("#welcome").hidden = value;
   $("#scene-caption").hidden = value || started;
   $("#hero-character").hidden = value || started;
   $("#crosshair").hidden = !value;
-  $("#play-hints").hidden = !value;
+  $("#play-hints").hidden = !value || touchMode;
+  $("#touch-controls").hidden = !value || !touchMode;
   document.body.classList.toggle("playing", value);
   if (!value) {
     target = null;
@@ -148,6 +176,11 @@ function setPlaying(value: boolean) {
 }
 async function play() {
   if ($("#modal").hasAttribute("open")) return;
+  if (touchMode) {
+    started = true;
+    setPlaying(true);
+    return;
+  }
   try {
     await view.renderer.domElement.requestPointerLock();
     started = true;
@@ -159,22 +192,26 @@ async function play() {
   }
 }
 document.addEventListener("pointerlockchange", () => {
+  if (touchMode) return;
   if (document.pointerLockElement === view.renderer.domElement) {
     started = true;
     setPlaying(true);
   } else setPlaying(false);
 });
 document.addEventListener("mousemove", (e) => {
-  if (!playing) return;
-  yaw -= e.movementX * 0.002 * sensitivity;
+  if (!playing || touchMode) return;
+  look(e.movementX, e.movementY);
+});
+function look(dx: number, dy: number) {
+  yaw -= dx * 0.002 * sensitivity;
   pitch = Math.max(
     playerCamera.mode === "third" ? -1.15 : -1.5,
     Math.min(
       playerCamera.mode === "third" ? 0.6 : 1.5,
-      pitch - e.movementY * 0.002 * sensitivity,
+      pitch - dy * 0.002 * sensitivity,
     ),
   );
-});
+}
 function toggleCamera() {
   playerCamera.toggle();
   pitch = Math.max(-1.15, Math.min(0.6, pitch));
@@ -194,6 +231,7 @@ $("#camera-toggle").addEventListener("click", toggleCamera);
 function edit(place: boolean) {
   if (!playing || !target) return;
   const cell = place ? target.adjacent : target.cell;
+  const removedId = world.get(...cell);
   if (place && intersectsPlayer(cell, player)) {
     toast("플레이어가 있는 곳에는 블록을 놓을 수 없어요.");
     return;
@@ -203,13 +241,14 @@ function edit(place: boolean) {
     return;
   }
   view.rebuild(world);
+  if (!place) items.spawn(removedId, cell[0] + 0.5, cell[1] + 0.5, cell[2] + 0.5);
   updateTarget();
   $("#save-status").textContent = "저장 중…";
   clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => save(), 500);
 }
 view.renderer.domElement.addEventListener("mousedown", (e) => {
-  if (!playing) return;
+  if (!playing || touchMode) return;
   if (e.button === 0 || e.button === 2) edit(e.button === 2);
 });
 view.renderer.domElement.addEventListener("contextmenu", (e) =>
@@ -238,17 +277,20 @@ window.addEventListener("keydown", (e) => {
   if (playing) keys.add(e.code);
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
+window.addEventListener("resize", () => touch?.reset());
 window.addEventListener("blur", () => {
   keys.clear();
+  if (touchMode && playing) setPlaying(false);
   if (document.pointerLockElement) document.exitPointerLock();
 });
 window.addEventListener("pagehide", () => {
-  if (world.edits.size) save();
+  save();
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     keys.clear();
-    if (world.edits.size) save();
+    if (touchMode && playing) setPlaying(false);
+    save();
   }
   lastTime = performance.now();
 });
@@ -258,17 +300,36 @@ document
   .querySelectorAll<HTMLButtonElement>(".slot")
   .forEach((button, i) => button.addEventListener("click", () => select(i)));
 const modal = $("#modal") as HTMLDialogElement;
+let resumeTouch = false;
+modal.addEventListener("close", () => {
+  if (resumeTouch && !document.hidden) setPlaying(true);
+  resumeTouch = false;
+});
 $(".modal-close").addEventListener("click", () => modal.close());
 modal.addEventListener("click", (e) => {
   if (e.target === modal) modal.close();
 });
 function showModal(content: string) {
+  if (!modal.open) resumeTouch = touchMode && playing;
   if (document.pointerLockElement) document.exitPointerLock();
   setPlaying(false);
   $("#modal-content").innerHTML = content;
   if (!modal.open) modal.showModal();
 }
 function showHelp() {
+  if (touchMode) {
+    showModal(`<span class="eyebrow">TOUCH & EXPLORE</span><h2>손끝으로 떠나는 숲속 모험</h2><div class="control-list">${[
+      ["화면 드래그", "빈 곳을 누른 채 상하좌우로 시점 이동"],
+      ["왼쪽 가상 패드", "밀어서 걷기 · 앞으로 빠르게 두 번 밀면 달리기"],
+      ["길게 탭 (0.5초)", "누른 위치의 블록 파괴"],
+      ["짧게 탭", "누른 블록 면에 선택한 블록 설치"],
+      ["↑ 버튼", "점프 (이동하면서도 가능)"],
+      ["••• 보관함", "블록 선택 · 습득한 아이템 확인"],
+      ["아이템 가까이 이동", "떨어진 블록 자동 습득"],
+      ["Ⅱ 버튼", "일시 정지"],
+    ].map(([key, value]) => `<div><kbd>${key}</kbd><span>${value}</span></div>`).join("")}</div><p class="modal-note">현재는 블록 만들기 모드로 설치 수량은 무제한입니다. 몹 전투와 사용형 아이템은 아직 없습니다. 저장은 현재 브라우저에만 유지됩니다.</p>`);
+    return;
+  }
   showModal(
     `<span class="eyebrow">MAKE YOURSELF AT HOME</span><h2>모험을 위한 작은 안내서</h2><p>희나냥과 숲을 걸어요! 멈춘 채 마우스를 돌리면 얼굴도 볼 수 있어요. 블록은 무제한입니다.</p><div class="control-list">${[
       ["W A S D / 방향키", "앞뒤, 좌우로 이동"],
@@ -291,6 +352,32 @@ function showHelp() {
 }
 $("#help").addEventListener("click", showHelp);
 $("#controls-link").addEventListener("click", showHelp);
+$("#touch-pause").addEventListener("click", () => setPlaying(false));
+$("#inventory-button").addEventListener("click", () => {
+  showModal(`<span class="eyebrow">MY FOREST COLLECTION</span><h2>희나냥의 보관함</h2><p>블록을 선택하면 손에 듭니다. 설치는 무제한이며, 주운 개수는 따로 기록돼요.</p><div class="inventory-grid">${BLOCKS.map((b, i) =>
+    `<button class="inventory-slot ${selected === i ? "active" : ""}" data-item="${i}" aria-label="${b.name} 선택"><i style="background:${b.color}"></i><strong>${b.name}</strong><span>습득 ${items.counts[i]}개 · 설치 ∞</span></button>`).join("")}</div>`);
+  modal.querySelectorAll<HTMLButtonElement>("[data-item]").forEach(button => {
+    button.addEventListener("click", () => { select(Number(button.dataset.item)); modal.close(); });
+  });
+});
+if (touchMode) {
+  const raycaster = new THREE.Raycaster();
+  touch = new TouchControls(view.renderer.domElement, $("#joystick"), $("#joystick-knob"), $("#touch-jump"), {
+    active: () => playing,
+    look,
+    jump: () => { jumpRequested = true; },
+    edit: (place, x, y) => {
+      const rect = view.renderer.domElement.getBoundingClientRect();
+      raycaster.setFromCamera(new THREE.Vector2(
+        (x - rect.left) / rect.width * 2 - 1,
+        -(y - rect.top) / rect.height * 2 + 1,
+      ), camera);
+      eye.set(player.x, player.y + PLAYER_HEIGHT - 0.15, player.z);
+      target = interactionTarget(world, raycaster.ray.origin, raycaster.ray.direction, eye);
+      edit(place);
+    },
+  });
+}
 $("#settings").addEventListener("click", () => {
   showModal(
     `<span class="eyebrow">YOUR WORLD, YOUR WAY</span><h2>편안한 탐험을 위해</h2><label class="setting-row"><span>마우스 감도</span><input id="sensitivity" type="range" min="0.3" max="2" step="0.1" value="${sensitivity}"></label><label class="setting-row"><span>그림자 · 고화질</span><input id="quality" type="checkbox" ${view.renderer.shadowMap.enabled ? "checked" : ""}></label><p class="modal-note">화면이 느리면 고화질을 꺼보세요. 세계의 변경 사항은 자동 저장됩니다.</p><div class="settings-actions"><button class="secondary-button" id="respawn">시작 지점으로 이동</button><button class="danger-button" id="reset-world">세계 초기화</button></div>`,
@@ -308,13 +395,14 @@ $("#settings").addEventListener("click", () => {
   });
   $("#reset-world").addEventListener("click", () => {
     showModal(
-      '<span class="eyebrow">A FRESH START</span><h2>처음부터 다시 만들까요?</h2><p>직접 놓거나 부순 블록이 모두 초기화됩니다. 이 작업은 되돌릴 수 없습니다.</p><div class="settings-actions"><button class="secondary-button" id="cancel-reset">취소</button><button class="danger-button" id="confirm-reset">초기화하기</button></div>',
+      '<span class="eyebrow">A FRESH START</span><h2>처음부터 다시 만들까요?</h2><p>직접 놓거나 부순 블록과 보관함의 수집 기록, 떨어진 아이템이 모두 초기화됩니다. 이 작업은 되돌릴 수 없습니다.</p><div class="settings-actions"><button class="secondary-button" id="cancel-reset">취소</button><button class="danger-button" id="confirm-reset">초기화하기</button></div>',
     );
     $("#cancel-reset").addEventListener("click", () => modal.close());
     $("#confirm-reset").addEventListener("click", () => {
       world.blocks.clear();
       world.edits.clear();
       world.generate();
+      items.clear();
       view.rebuild(world);
       respawn();
       save();
@@ -342,22 +430,23 @@ function updateTarget() {
 function physics(dt: number) {
   const forward =
     Number(keys.has("KeyW") || keys.has("ArrowUp")) -
-    Number(keys.has("KeyS") || keys.has("ArrowDown"));
+    Number(keys.has("KeyS") || keys.has("ArrowDown")) + (touch?.forward ?? 0);
   const strafe =
     Number(keys.has("KeyD") || keys.has("ArrowRight")) -
-    Number(keys.has("KeyA") || keys.has("ArrowLeft"));
-  const norm = Math.hypot(forward, strafe) || 1;
+    Number(keys.has("KeyA") || keys.has("ArrowLeft")) + (touch?.strafe ?? 0);
+  const norm = Math.max(1, Math.hypot(forward, strafe));
   const speed =
-    (keys.has("ShiftLeft") || keys.has("ShiftRight") ? 7 : 4.3) *
+    (keys.has("ShiftLeft") || keys.has("ShiftRight") || touch?.sprint ? 7 : 4.3) *
     (player.y < 3.5 ? 0.6 : 1);
   velocity.x =
     ((-Math.sin(yaw) * forward + Math.cos(yaw) * strafe) / norm) * speed;
   velocity.z =
     ((-Math.cos(yaw) * forward - Math.sin(yaw) * strafe) / norm) * speed;
-  if (keys.has("Space") && grounded) {
+  if ((keys.has("Space") || jumpRequested) && grounded) {
     velocity.y = 8.3;
     grounded = false;
   }
+  jumpRequested = false;
   velocity.y = Math.max(-25, velocity.y - 23 * dt);
   // Small collision steps prevent tunnelling even after a slow frame.
   const steps =
@@ -400,6 +489,12 @@ function frame(now: number) {
     view.character.root.visible =
       playerCamera.mode === "third" && playerCamera.distance > 0.7;
     updateTarget();
+    const collected = items.update(dt, player, world);
+    if (collected) {
+      toast(`블록 ${collected}개를 보관함에 담았어요.`);
+      clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(() => save(), 500);
+    }
   } else if (!started) {
     motion.set(0, 0, 0);
     view.character.update(dt, elapsed, player, motion, true);
@@ -447,6 +542,12 @@ if (import.meta.env.DEV)
   Object.defineProperty(window, "__brickland", {
     get: () => ({
       playing,
+      touchMode,
+      touch: touch ? { forward: touch.forward, strafe: touch.strafe, sprint: touch.sprint } : null,
+      yaw,
+      pitch,
+      inventory: [...items.counts],
+      drops: items.drops.map(d => ({ id: d.id, count: d.count, position: d.mesh.position.toArray() })),
       selected,
       player: player.toArray(),
       grounded,

@@ -109,7 +109,7 @@ export class GameScene {
   sun: THREE.DirectionalLight;
   constructor(container: HTMLElement, world: World) {
     this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: !matchMedia("(pointer: coarse)").matches,
       powerPreference: "high-performance",
     });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
